@@ -223,6 +223,8 @@ async def get_result(url: str, headers: dict = None, resolution: str = None,
         async with ClientSession(connector=TCPConnector(ssl=False), trust_env=True) as session:
             res_headers = await get_headers(url, headers, session)
             if not res_headers:
+                res_info = await get_speed_with_download(url, headers, session, timeout)
+                info.update({'speed': res_info['speed'], 'delay': res_info['delay']})
                 return info
             location = res_headers.get('Location')
             if location:
