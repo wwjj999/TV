@@ -472,9 +472,6 @@ def convert_to_m3u(path=None, first_channel_name=None, data=None):
                             )
                         tvg_id = get_channel_epg_id(use_name) or processed_channel_name
 
-                        m3u_output += f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-name="{processed_channel_name}" tvg-logo="{join_url(logo_url, f"{processed_channel_name}.{config.logo_type}")}"'
-                        if current_group:
-                            m3u_output += f' group-title="{current_group}"'
                         item_data = {}
                         if data:
                             item_list = data.get(original_channel_name, [])
@@ -482,6 +479,15 @@ def convert_to_m3u(path=None, first_channel_name=None, data=None):
                                 if item["url"] == channel_link:
                                     item_data = item
                                     break
+                        channel_logo = ""
+                        if config.open_subscribe_logo and item_data:
+                            channel_logo = item_data.get("tvg_logo") or ""
+                        if not channel_logo:
+                            channel_logo = join_url(logo_url, f"{processed_channel_name}.{config.logo_type}")
+
+                        m3u_output += f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-name="{processed_channel_name}" tvg-logo="{channel_logo}"'
+                        if current_group:
+                            m3u_output += f' group-title="{current_group}"'
                         if item_data:
                             catchup = item_data.get("catchup")
                             if catchup:
@@ -648,6 +654,25 @@ def get_headers_key_value(content: str) -> dict:
     return key_value
 
 
+def get_m3u_epg_urls(content: str) -> list[str]:
+    """
+    Extract EPG urls declared in the m3u #EXTM3U header (url-tvg / x-tvg-url).
+    """
+    urls = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("#EXTM3U"):
+            continue
+        attributes = get_headers_key_value(stripped[len("#EXTM3U"):])
+        for key in ("urltvg", "xtvgurl"):
+            for url in attributes.get(key, "").split(","):
+                url = url.strip()
+                if url.startswith(("http://", "https://")) and url not in urls:
+                    urls.append(url)
+        break
+    return urls
+
+
 def get_name_value(content, pattern, open_headers=False, check_value=True):
     """
     Extract name and value from content using a regex pattern.
@@ -674,7 +699,7 @@ def get_name_value(content, pattern, open_headers=False, check_value=True):
         catchup = {k: v for k, v in catchup.items() if v}
         if not open_headers and headers:
             return
-        item = {"name": name, "value": value, "catchup": catchup}
+        item = {"name": name, "value": value, "catchup": catchup, "tvg_logo": attributes.get("tvglogo", "")}
         if open_headers:
             item["headers"] = headers
         result.append(item)

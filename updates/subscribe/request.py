@@ -18,6 +18,7 @@ from utils.tools import (
     merge_objects,
     get_pbar_remaining,
     get_name_value,
+    get_m3u_epg_urls,
     get_logger, join_url,
     github_blob_to_raw,
     save_url_content, close_logger_handlers,
@@ -30,6 +31,7 @@ async def get_channels_by_subscribe_urls(
         names=None,
         whitelist=None,
         callback=None,
+        epg_urls_out=None,
 ):
     """
     Get the channels by subscribe urls
@@ -80,8 +82,11 @@ async def get_channels_by_subscribe_urls(
     open_headers = config.open_headers
     open_unmatch_category = config.open_unmatch_category
     open_auto_disable_source = config.open_auto_disable_source
+    open_subscribe_epg = config.open_subscribe_epg
     disabled_urls = set()
     disabled_lock = Lock()
+    discovered_epg_urls = set()
+    epg_discover_lock = Lock()
 
     def _mark_disabled(source_url: str, reason: str):
         if not open_auto_disable_source or not source_url:
@@ -120,6 +125,11 @@ async def get_channels_by_subscribe_urls(
                     pass
                 if content:
                     m3u_type = True if "#EXTM3U" in content else False
+                    if open_subscribe_epg and m3u_type:
+                        found_epg_urls = get_m3u_epg_urls(content)
+                        if found_epg_urls:
+                            with epg_discover_lock:
+                                discovered_epg_urls.update(found_epg_urls)
                     data = get_name_value(
                         content,
                         pattern=(
@@ -144,6 +154,7 @@ async def get_channels_by_subscribe_urls(
                             value = {
                                 "url": url,
                                 "headers": item.get("headers", None),
+                                "tvg_logo": item.get("tvg_logo") or None,
                                 "extra_info": info
                             }
                             if in_whitelist:
@@ -190,5 +201,8 @@ async def get_channels_by_subscribe_urls(
             disabled_count = counts["disabled"]
         print(t("msg.auto_disable_source_done").format(name=mode_name, active_count=active_count,
                                                        disabled_count=disabled_count), flush=True)
+        if epg_urls_out is not None and discovered_epg_urls:
+            epg_urls_out.update(discovered_epg_urls)
+            print(t("msg.subscribe_epg_found").format(count=len(discovered_epg_urls)), flush=True)
         close_logger_handlers(logger)
         return subscribe_results

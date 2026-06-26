@@ -22,6 +22,7 @@ class ChannelData(TypedDict):
     isp: NotRequired[str | None]
     headers: NotRequired[dict[str, str] | None]
     catchup: NotRequired[dict[str, str] | None]
+    tvg_logo: NotRequired[str | None]
     extra_info: NotRequired[str]
 
 

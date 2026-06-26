@@ -90,20 +90,41 @@ def parse_epg(epg_content):
     return channels, programmes
 
 
-async def get_epg(names=None, callback=None):
+def _epg_dedup_key(url) -> str:
+    """
+    Normalize an EPG url for de-duplication (scheme / .gz / trailing-slash insensitive).
+    """
+    if not url:
+        return ""
+    key = github_blob_to_raw(str(url)).strip()
+    key = re.sub(r"^https?://", "", key, flags=re.IGNORECASE).rstrip("/")
+    if key.endswith(".gz"):
+        key = key[:-3]
+    return key.lower()
+
+
+async def get_epg(names=None, callback=None, extra_entries=None):
     normalized_names = {format_channel_name(name) for name in (names or []) if name}
     whitelist_entries, default_entries = get_subscribe_entries(constants.epg_path)
-    entries = whitelist_entries + default_entries
+    configured_entries = whitelist_entries + default_entries
+    discovered_entries = []
+    if extra_entries:
+        seen_keys = {_epg_dedup_key(e.get("url") if isinstance(e, dict) else e) for e in configured_entries}
+        for url in extra_entries:
+            key = _epg_dedup_key(url)
+            if url and key and key not in seen_keys:
+                discovered_entries.append(url)
+                seen_keys.add(key)
     disabled_count = count_disabled_urls(constants.epg_path)
     print(
         t("msg.epg_urls_whitelist_total").format(
             default_count=len(default_entries),
             whitelist_count=len(whitelist_entries),
             disabled_count=disabled_count,
-            total=len(entries),
+            total=len(configured_entries),
         )
     )
-    if not entries:
+    if not configured_entries and not discovered_entries:
         return {}
     if not os.getenv("GITHUB_ACTIONS") and config.cdn_url:
         def _map_raw(u):
@@ -118,9 +139,10 @@ async def get_epg(names=None, callback=None):
                 return e
             return {'url': _map_raw(e), 'source_url': e}
 
-        entries = [_map_entry(e) for e in entries]
+        configured_entries = [_map_entry(e) for e in configured_entries]
+        discovered_entries = [_map_entry(e) for e in discovered_entries]
 
-    urls_len = len(entries)
+    urls_len = len(configured_entries) + len(discovered_entries)
     pbar = tqdm_asyncio(
         total=urls_len,
         desc=t("pbar.getting_name").format(name=t("name.epg")),
@@ -132,6 +154,7 @@ async def get_epg(names=None, callback=None):
     start_time = time()
     result = defaultdict(list)
     all_result_verify = set()
+    result_lock = Lock()
     session = Session()
     open_unmatch_category = config.open_unmatch_category
     open_auto_disable_source = config.open_auto_disable_source
@@ -173,10 +196,12 @@ async def get_epg(names=None, callback=None):
                             continue
                         entry_matched = True
                         if channel_id not in all_result_verify and display_name not in all_result_verify:
-                            if not channel_id.isdigit():
-                                all_result_verify.add(channel_id)
-                            all_result_verify.add(display_name)
-                            result[display_name] = programmes[channel_id]
+                            with result_lock:
+                                if channel_id not in all_result_verify and display_name not in all_result_verify:
+                                    if not channel_id.isdigit():
+                                        all_result_verify.add(channel_id)
+                                    all_result_verify.add(display_name)
+                                    result[display_name] = programmes[channel_id]
                     if not entry_matched and not disable_reason:
                         disable_reason = t("msg.auto_disable_no_match")
                 elif not disable_reason:
@@ -202,11 +227,14 @@ async def get_epg(names=None, callback=None):
                 )
 
     with ThreadPoolExecutor(max_workers=10) as executor:
-        for entry in entries:
+        for entry in configured_entries:
+            executor.submit(process_run, entry)
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for entry in discovered_entries:
             executor.submit(process_run, entry)
     session.close()
     pbar.close()
-    active_count = len(entries)
+    active_count = len(configured_entries)
     disabled_count = 0
     if disabled_urls:
         counts = disable_urls_in_file(constants.epg_path, disabled_urls)

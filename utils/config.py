@@ -256,6 +256,10 @@ class ConfigManager:
         return self.config.getboolean("Settings", "open_epg", fallback=True)
 
     @property
+    def open_subscribe_epg(self):
+        return self.config.getboolean("Settings", "open_subscribe_epg", fallback=False)
+
+    @property
     def speed_test_limit(self):
         return self.config.getint("Settings", "speed_test_limit", fallback=5)
 
@@ -308,6 +312,10 @@ class ConfigManager:
     @property
     def logo_type(self):
         return self.config.get("Settings", "logo_type", fallback="png")
+
+    @property
+    def open_subscribe_logo(self):
+        return self.config.getboolean("Settings", "open_subscribe_logo", fallback=False)
 
     @property
     def rtmp_idle_timeout(self):

@@ -470,6 +470,7 @@ def append_data_to_info_data(
             isp = item.get("isp")
             headers = item.get("headers")
             catchup = item.get("catchup")
+            tvg_logo = item.get("tvg_logo")
             extra_info = item.get("extra_info", "")
 
             if not raw_url:
@@ -515,6 +516,7 @@ def append_data_to_info_data(
                         "isp": isp,
                         "headers": headers,
                         "catchup": catchup,
+                        "tvg_logo": tvg_logo,
                         "extra_info": extra_info
                     }
                     continue
@@ -561,6 +563,7 @@ def append_data_to_info_data(
                 "isp": isp,
                 "headers": headers,
                 "catchup": catchup,
+                "tvg_logo": tvg_logo,
                 "extra_info": extra_info
             })
             existing_map[url] = len(channel_list) - 1
