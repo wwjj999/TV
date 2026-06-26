@@ -1,4 +1,3 @@
-import os
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from logging import INFO
@@ -19,8 +18,9 @@ from utils.tools import (
     get_pbar_remaining,
     get_name_value,
     get_m3u_epg_urls,
-    get_logger, join_url,
-    github_blob_to_raw,
+    get_logger,
+    get_request_url_candidates,
+    request_first,
     save_url_content, close_logger_handlers,
     disable_urls_in_file,
 )
@@ -37,21 +37,6 @@ async def get_channels_by_subscribe_urls(
     Get the channels by subscribe urls
     """
     normalized_names = {format_channel_name(name) for name in (names or []) if name}
-    if not os.getenv("GITHUB_ACTIONS") and config.cdn_url:
-        def _map_raw(u):
-            raw_u = github_blob_to_raw(u)
-            return join_url(config.cdn_url, raw_u) if "raw.githubusercontent.com" in raw_u else raw_u
-
-        def _map_entry(e):
-            if isinstance(e, dict):
-                e = e.copy()
-                e.setdefault('source_url', e.get('url'))
-                e['url'] = _map_raw(e.get('url'))
-                return e
-            return {'url': _map_raw(e), 'source_url': e}
-
-        urls = [_map_entry(u) for u in urls]
-        whitelist = [_map_raw(u) for u in whitelist] if whitelist else None
     if whitelist:
         index_map = {u: i for i, u in enumerate(whitelist)}
 
@@ -106,8 +91,14 @@ async def get_channels_by_subscribe_urls(
         try:
             response = None
             try:
-                response = retry_func(lambda: get_soup_requests(subscribe_url, timeout=request_timeout,
-                                                                headers_override=headers), name=subscribe_url)
+                candidates = get_request_url_candidates(subscribe_url)
+                response = retry_func(
+                    lambda: request_first(
+                        candidates,
+                        lambda u: get_soup_requests(u, timeout=request_timeout, headers_override=headers),
+                    ),
+                    name=subscribe_url,
+                )
             except Exception as e:
                 print(e, flush=True)
                 disable_reason = t("msg.auto_disable_request_failed")

@@ -1,5 +1,4 @@
 import gzip
-import os
 import re
 import xml.etree.ElementTree as ET
 from collections import defaultdict
@@ -20,8 +19,9 @@ from utils.retry import retry_func
 from utils.tools import (
     get_pbar_remaining,
     opencc_t2s,
-    join_url,
     github_blob_to_raw,
+    get_request_url_candidates,
+    request_first,
     get_subscribe_entries,
     count_disabled_urls,
     disable_urls_in_file,
@@ -126,22 +126,6 @@ async def get_epg(names=None, callback=None, extra_entries=None):
     )
     if not configured_entries and not discovered_entries:
         return {}
-    if not os.getenv("GITHUB_ACTIONS") and config.cdn_url:
-        def _map_raw(u):
-            raw_u = github_blob_to_raw(u)
-            return join_url(config.cdn_url, raw_u) if "raw.githubusercontent.com" in raw_u else raw_u
-
-        def _map_entry(e):
-            if isinstance(e, dict):
-                e = e.copy()
-                e.setdefault('source_url', e.get('url'))
-                e['url'] = _map_raw(e.get('url'))
-                return e
-            return {'url': _map_raw(e), 'source_url': e}
-
-        configured_entries = [_map_entry(e) for e in configured_entries]
-        discovered_entries = [_map_entry(e) for e in discovered_entries]
-
     urls_len = len(configured_entries) + len(discovered_entries)
     pbar = tqdm_asyncio(
         total=urls_len,
@@ -178,8 +162,15 @@ async def get_epg(names=None, callback=None, extra_entries=None):
             headers = entry.get('headers') if isinstance(entry, dict) else None
             response = None
             try:
+                candidates = get_request_url_candidates(request_url)
+
+                def _fetch(u):
+                    resp = session.get(u, timeout=config.request_timeout, headers=headers)
+                    resp.raise_for_status()
+                    return resp
+
                 response = retry_func(
-                    lambda: session.get(request_url, timeout=config.request_timeout, headers=headers),
+                    lambda: request_first(candidates, _fetch),
                     name=request_url,
                 )
             except Exception as e:

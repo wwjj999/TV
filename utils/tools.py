@@ -950,6 +950,37 @@ def github_blob_to_raw(url: str) -> str:
     return raw_url
 
 
+def get_request_url_candidates(url: str) -> List[str]:
+    """
+    Build the ordered list of candidate request urls for a source url. For
+    raw.githubusercontent.com urls every configured CDN mirror in
+    config.cdn_urls is prefixed in order so a failed mirror can fall back to
+    the next one; other urls return themselves. CDN is skipped under GitHub Actions.
+    """
+    if not os.getenv("GITHUB_ACTIONS") and config.cdn_urls:
+        raw_url = github_blob_to_raw(url)
+        if "raw.githubusercontent.com" in raw_url:
+            return [join_url(cdn, raw_url) for cdn in config.cdn_urls]
+        return [raw_url]
+    return [url]
+
+
+def request_first(candidates: List[str], fetch):
+    """
+    Try fetch(url) for each candidate url in order, returning the first
+    successful result; raise the last error if every candidate fails.
+    """
+    last_error = None
+    for url in candidates:
+        try:
+            return fetch(url)
+        except Exception as e:
+            last_error = e
+    if last_error:
+        raise last_error
+    return None
+
+
 def add_port_to_url(url: str, port: int) -> str:
     """
     Add port to the url

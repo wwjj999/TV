@@ -240,8 +240,14 @@ class ConfigManager:
         return self.config.getboolean("Settings", "speed_test_filter_host", fallback=False)
 
     @property
+    def cdn_urls(self):
+        raw = self.config.get("Settings", "cdn_url", fallback="")
+        return [u.strip() for u in re.split(r"[,\n]", raw) if u.strip()]
+
+    @property
     def cdn_url(self):
-        return self.config.get("Settings", "cdn_url", fallback="")
+        urls = self.cdn_urls
+        return urls[0] if urls else ""
 
     @property
     def open_rtmp(self):
