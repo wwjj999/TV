@@ -340,6 +340,8 @@ docker run -d -p 80:8080 guovern/iptv-api
 | PUBLIC_PORT     | Public port, set to the mapped port, determines external access address and the port used in push stream results | 80        |
 | NGINX_HTTP_PORT | Nginx HTTP service port, needs to be mapped for external access                                                  | 8080      |
 
+> When IPv6 is enabled on the host/Docker, the container automatically listens on IPv6 addresses as well, with no extra configuration; in IPv4-only or IPv6-disabled environments it is skipped automatically.
+
 If you need to modify environment variables, add the following parameters after the above run command:
 
 ```bash

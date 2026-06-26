@@ -260,6 +260,8 @@ docker run -d -p 80:8080 guovern/iptv-api
 | PUBLIC_PORT     | 公网端口，设置为映射后的端口，决定外部访问地址和推流结果地址的端口 | 80        |
 | NGINX_HTTP_PORT | HTTP服务端口，外部访问需要映射该端口              | 8080      |
 
+> 当宿主机/Docker 已启用 IPv6 时，容器会自动同时监听 IPv6 地址，无需额外配置；纯 IPv4 或禁用 IPv6 的环境则自动跳过。
+
 如果需要修改环境变量，在上述运行命令后添加以下参数：
 
 ```bash
