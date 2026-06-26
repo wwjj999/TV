@@ -32,6 +32,7 @@
 | open_speed_test        | 开启测速功能，获取响应时间、速率、分辨率                                                                                                 | True                                     |
 | open_filter_resolution | 开启分辨率过滤，低于最小分辨率（min_resolution）的接口将会被过滤，GUI 用户需要手动安装 FFmpeg，程序会自动调用 FFmpeg 获取接口分辨率，推荐开启，虽然会增加测速阶段耗时，但能更有效地区分是否可播放的接口 | True                                     |
 | open_filter_speed      | 开启速率过滤，低于最小速率（min_speed）的接口将会被过滤                                                                                     | True                                     |
+| open_filter_ad         | 开启广告过滤，自动识别并过滤无信号/广告等循环占位源（含 #EXT-X-ENDLIST 的短循环列表，或片段地址包含广告关键字），复用测速阶段已抓取的播放列表进行判断，不增加额外请求与测速耗时                            | True                                     |
 | open_full_speed_test   | 开启全量测速，频道下所有接口（白名单除外）都进行测速，关闭则当测速有效结果数量达到urls_limit后停止剩余接口测速                                                         | False                                    |
 | open_supply            | 开启补偿机制模式，用于控制当频道接口数量不足时，自动将不满足条件（例如低于最小速率）但可能可用的接口添加至结果中，从而避免结果为空的情况                                                 | False                                    |
 | min_resolution         | 接口最小分辨率，需要开启 open_filter_resolution 才能生效                                                                             | 1280x720                                 |

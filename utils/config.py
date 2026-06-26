@@ -74,6 +74,12 @@ class ConfigManager:
         )
 
     @property
+    def open_filter_ad(self):
+        return self.config.getboolean(
+            "Settings", "open_filter_ad", fallback=True
+        )
+
+    @property
     def ipv_type(self):
         return self.config.get("Settings", "ipv_type", fallback="all").lower()
 

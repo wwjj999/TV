@@ -27,6 +27,7 @@ open_filter_speed = config.open_filter_speed
 min_speed_value = config.min_speed
 resolution_speed_map = config.resolution_speed_map
 speed_test_limit = config.speed_test_limit
+open_filter_ad = config.open_filter_ad
 m3u8_headers = ['application/x-mpegurl', 'application/vnd.apple.mpegurl', 'audio/mpegurl', 'audio/x-mpegurl']
 default_ipv6_delay = 0.1
 default_ipv6_resolution = "1920x1080"
@@ -39,6 +40,23 @@ default_ipv6_result = {
 min_measure_time = 1.0
 stability_window = 4
 stability_threshold = 0.12
+
+ad_filter_keywords = [
+    "no_signal",
+    "nosignal",
+    "no-signal",
+    "signal_offline",
+    "no_video",
+    "novideo",
+    "advertisement",
+    "advert",
+    "placeholder",
+    "default_video",
+    "cctv_off",
+    "/ad/",
+    "/ads/",
+]
+ad_max_loop_duration = 90
 
 
 async def get_speed_with_download(url: str, headers: dict = None, session: ClientSession = None,
@@ -160,6 +178,20 @@ def check_m3u8_valid(headers: dict) -> bool:
     return any(item in content_type for item in m3u8_headers)
 
 
+def is_ad_playlist(media_playlist, base_url: str = "") -> bool:
+    segments = getattr(media_playlist, "segments", None)
+    if not segments:
+        return False
+    haystack = (base_url + " " + " ".join(segment.uri or "" for segment in segments)).lower()
+    if any(keyword in haystack for keyword in ad_filter_keywords):
+        return True
+    if getattr(media_playlist, "is_endlist", False):
+        total_duration = sum(segment.duration or 0 for segment in segments)
+        if 0 < total_duration <= ad_max_loop_duration:
+            return True
+    return False
+
+
 def _parse_time_to_seconds(t: str) -> float:
     """
     Parse time string to seconds
@@ -207,8 +239,12 @@ async def get_result(url: str, headers: dict = None, resolution: str = None,
                         playlist_content = await get_url_content(playlist_url, headers, session, timeout)
                         if playlist_content:
                             media_playlist = m3u8.loads(playlist_content)
+                            if open_filter_ad and is_ad_playlist(media_playlist, playlist_url):
+                                raise Exception("Ad source filtered")
                             segment_urls = [urljoin(playlist_url, segment.uri) for segment in media_playlist.segments]
                     else:
+                        if open_filter_ad and is_ad_playlist(m3u8_obj, url):
+                            raise Exception("Ad source filtered")
                         segment_urls = [urljoin(url, segment.uri) for segment in segments]
                     if not segment_urls:
                         raise Exception("Segment urls not found")
