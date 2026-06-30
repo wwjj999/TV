@@ -23,6 +23,7 @@ open_filter_resolution = config.open_filter_resolution
 min_resolution_value = config.min_resolution_value
 max_resolution_value = config.max_resolution_value
 open_supply = config.open_supply
+sort_by = config.sort_by
 open_filter_speed = config.open_filter_speed
 min_speed_value = config.min_speed
 resolution_speed_map = config.resolution_speed_map
@@ -571,7 +572,20 @@ def get_sort_result(
                 if resolution_value < min_resolution or resolution_value > max_resolution:
                     continue
         total_result.append(result)
-    total_result.sort(key=lambda item: item.get("speed") or 0, reverse=True)
+
+    def sort_key(item):
+        keys = []
+        for dim in sort_by:
+            if dim == "speed":
+                keys.append(-(item.get("speed") or 0))
+            elif dim == "delay":
+                delay = item.get("delay")
+                keys.append(delay if isinstance(delay, (int, float)) and delay >= 0 else float("inf"))
+            elif dim == "resolution":
+                keys.append(-(get_resolution_value(item.get("resolution") or "") or 0))
+        return tuple(keys)
+
+    total_result.sort(key=sort_key)
     return total_result
 
 

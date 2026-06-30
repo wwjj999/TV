@@ -220,6 +220,13 @@ class ConfigManager:
         return self.config.getboolean("Settings", "open_supply", fallback=False)
 
     @property
+    def sort_by(self):
+        raw = self.config.get("Settings", "sort_by", fallback="speed")
+        allowed = ("speed", "delay", "resolution")
+        result = [s.strip().lower() for s in str(raw).split(",") if s.strip().lower() in allowed]
+        return result or ["speed"]
+
+    @property
     def update_time_position(self):
         return self.config.get("Settings", "update_time_position", fallback="top")
 
@@ -256,6 +263,10 @@ class ConfigManager:
     @property
     def open_headers(self):
         return self.config.getboolean("Settings", "open_headers", fallback=False)
+
+    @property
+    def user_agent(self):
+        return self.config.get("Settings", "user_agent", fallback="").strip()
 
     @property
     def open_epg(self):

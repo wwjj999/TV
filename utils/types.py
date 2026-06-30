@@ -24,6 +24,7 @@ class ChannelData(TypedDict):
     catchup: NotRequired[dict[str, str] | None]
     tvg_logo: NotRequired[str | None]
     extra_info: NotRequired[str]
+    supply: NotRequired[bool]
 
 
 CategoryChannelData = dict[str, dict[str, list[ChannelData]]]

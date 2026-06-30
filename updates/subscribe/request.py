@@ -142,9 +142,10 @@ async def get_channels_by_subscribe_urls(
                             url_partition = url.partition("$")
                             url = url_partition[0]
                             info = url_partition[2]
+                            item_headers = {**(headers or {}), **(item.get("headers") or {})}
                             value = {
                                 "url": url,
-                                "headers": item.get("headers", None),
+                                "headers": item_headers or None,
                                 "tvg_logo": item.get("tvg_logo") or None,
                                 "extra_info": info
                             }

@@ -207,7 +207,8 @@ def get_total_urls(
         ipv_type_prefer = ["all"]
     if not origin_prefer_bool:
         origin_type_prefer = ["all"]
-    categorized_urls = {origin: {ipv_type: [] for ipv_type in ipv_type_prefer} for origin in origin_type_prefer}
+    primary_urls = {origin: {ipv_type: [] for ipv_type in ipv_type_prefer} for origin in origin_type_prefer}
+    supply_urls = {origin: {ipv_type: [] for ipv_type in ipv_type_prefer} for origin in origin_type_prefer}
     total_urls = []
     for info in info_list:
         channel_id, url, origin, resolution, url_ipv_type, extra_info = (
@@ -241,6 +242,7 @@ def get_total_urls(
         if not origin_prefer_bool:
             origin = "all"
 
+        categorized_urls = supply_urls if info.get("supply") else primary_urls
         if ipv_prefer_bool:
             if url_ipv_type in ipv_type_prefer:
                 categorized_urls[origin][url_ipv_type].append(info)
@@ -248,21 +250,25 @@ def get_total_urls(
             categorized_urls[origin]["all"].append(info)
 
     urls_limit = config.urls_limit if apply_limit else None
-    for origin in origin_type_prefer:
-        if urls_limit is not None and len(total_urls) >= urls_limit:
-            break
-        for ipv_type in ipv_type_prefer:
+
+    def fill_urls(categorized):
+        for origin in origin_type_prefer:
             if urls_limit is not None and len(total_urls) >= urls_limit:
                 break
-            urls = categorized_urls[origin].get(ipv_type, [])
-            if not urls:
-                continue
-            if urls_limit is None:
-                total_urls.extend(urls)
-            else:
-                remaining = urls_limit - len(total_urls)
-                limit_urls = urls[:remaining]
-                total_urls.extend(limit_urls)
+            for ipv_type in ipv_type_prefer:
+                if urls_limit is not None and len(total_urls) >= urls_limit:
+                    break
+                urls = categorized[origin].get(ipv_type, [])
+                if not urls:
+                    continue
+                if urls_limit is None:
+                    total_urls.extend(urls)
+                else:
+                    remaining = urls_limit - len(total_urls)
+                    total_urls.extend(urls[:remaining])
+
+    fill_urls(primary_urls)
+    fill_urls(supply_urls)
 
     if urls_limit is not None:
         total_urls = total_urls[:urls_limit]
@@ -494,11 +500,11 @@ def convert_to_m3u(path=None, first_channel_name=None, data=None):
                                 for key, value in catchup.items():
                                     m3u_output += f' {key}="{value}"'
                         m3u_output += f",{original_channel_name}\n"
-                        if item_data and config.open_headers:
-                            headers = item_data.get("headers")
-                            if headers:
-                                for key, value in headers.items():
-                                    m3u_output += f"#EXTVLCOPT:http-{key.lower()}={value}\n"
+                        item_headers = dict(item_data.get("headers") or {}) if item_data else {}
+                        if config.user_agent and "User-Agent" not in item_headers:
+                            item_headers["User-Agent"] = config.user_agent
+                        for key, value in item_headers.items():
+                            m3u_output += f"#EXTVLCOPT:http-{key.lower()}={value}\n"
                         m3u_output += f"{channel_link}\n"
             m3u_file_path = os.path.splitext(path)[0] + ".m3u"
             with open(m3u_file_path, "w", encoding="utf-8") as m3u_file:
