@@ -1021,7 +1021,7 @@
                 "sha256:af101222762665a4125157906cb4b23f5d5a63d3851d5e0504f72a1eaaa2cfd2",
                 "sha256:efe465e3ecc6fc73f7c7622620345d134a8d34564ab1c29d8247e45f4ed55071"
             ],
-            "markers": "python_version >= '3.10'",
+            "markers": "sys_platform == 'darwin' and python_version >= '3.10'",
             "version": "==12.2.1"
         },
         "pyobjc-framework-cocoa": {
@@ -1037,7 +1037,7 @@
                 "sha256:dc2eaca2f13c7bcd8e41e51a372e47825dea9dd3126108760eed7ba883d2945c",
                 "sha256:dc6da84f4fc62cc25463bbb85e77a57b8d5ac6caf9a60702daf2edb601332f15"
             ],
-            "markers": "python_version >= '3.10'",
+            "markers": "sys_platform == 'darwin' and python_version >= '3.10'",
             "version": "==12.2.1"
         },
         "pyobjc-framework-quartz": {
@@ -1053,7 +1053,7 @@
                 "sha256:ceb56939c337b36d9d81185ade31f77dc52c85cf79bb16e53e9b32f54b6bb3f5",
                 "sha256:de9c8cca7e95290c8d540466af11c7cdfe3a5458e6f56c34006d5b45243f9ed9"
             ],
-            "markers": "python_version >= '3.10'",
+            "markers": "sys_platform == 'darwin' and python_version >= '3.10'",
             "version": "==12.2.1"
         },
         "pystray": {
