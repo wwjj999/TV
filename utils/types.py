@@ -13,13 +13,18 @@ class ChannelData(TypedDict):
     host: str
     date: NotRequired[str | None]
     resolution: NotRequired[str | None]
+    video_codec: NotRequired[str | None]
+    audio_codec: NotRequired[str | None]
+    fps: NotRequired[float | None]
     origin: OriginType
     ipv_type: IPvType
     location: NotRequired[str | None]
     isp: NotRequired[str | None]
     headers: NotRequired[dict[str, str] | None]
     catchup: NotRequired[dict[str, str] | None]
+    tvg_logo: NotRequired[str | None]
     extra_info: NotRequired[str]
+    supply: NotRequired[bool]
 
 
 CategoryChannelData = dict[str, dict[str, list[ChannelData]]]
@@ -31,7 +36,10 @@ class TestResult(TypedDict):
     """
     speed: int | float | None
     delay: int | float | None
-    resolution: int | str | None
+    resolution: NotRequired[str | None]
+    video_codec: NotRequired[str | None]
+    audio_codec: NotRequired[str | None]
+    fps: NotRequired[float | None]
 
 
 TestResultCacheData = dict[str, list[TestResult]]

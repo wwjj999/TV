@@ -134,6 +134,15 @@ Adjust the configuration as needed, here is the default configuration descriptio
      uncheck display interface information) to disable this feature.
 > 2. If your network supports IPv6, you can modify the configuration: `ipv6_support = True` (GUI: Check
      `Force assume the current network supports IPv6`) to skip the support check.
+> 3. To specify request headers for playback/speed testing, configure the global `user_agent` (a unified UA), or append
+     `UA=value` after a subscription URL in `config/subscribe.txt` (for a single subscription source); the UA is written
+     into the `.m3u` result without enabling `open_headers`.
+> 4. After configuring `location` / `isp`, non-matching interfaces are filtered out directly by default; if you enable
+     `open_supply = True`, non-matching interfaces are no longer dropped but downranked to the end of the channel result
+     as a supplement, avoiding the accidental removal of usable interfaces.
+> 5. Use `sort_by` to customize the sorting priority of interfaces within each channel, comma-separated, with optional
+     values `speed`, `delay`, and `resolution`, compared in order from front to back, e.g. `resolution,speed` sorts by
+     resolution first and then by speed.
 
 #### Add data sources and more
 
@@ -143,6 +152,20 @@ Adjust the configuration as needed, here is the default configuration descriptio
   be empty. Both `.txt` and `.m3u` URLs are supported as subscriptions, and the program will read channel interface
   entries from them sequentially.
   ![Subscription sources](./images/subscribe.png 'Subscription sources')
+
+  If a subscription source requires a specific `User-Agent` to be accessed, append `UA=value` after the subscription URL
+  (wrap it in quotes when it contains spaces), for example:
+
+  ```text
+  https://example.com/sub.m3u UA=okHttp/Mod-1.5.0.0
+  https://example.com/sub2.m3u UA="Mozilla/5.0 xxx"
+  ```
+
+  This `UA` is used for: fetching the subscription content, speed testing the interfaces under that subscription, and
+  writing into the `.m3u` result (for players) — no need to enable `open_headers`. If you want to apply one UA to all
+  interfaces (instead of adding it one by one), set the global `user_agent` in the configuration. Priority: interface's
+  own UA (`#EXTVLCOPT` embedded in m3u) > subscription URL UA > global `user_agent` > built-in default UA. Note: request
+  headers can only be written into the `.m3u` result; the `.txt` format cannot carry a UA.
 
 
 - Local sources（`config/local.txt`）
@@ -340,6 +363,8 @@ docker run -d -p 80:8080 guovern/iptv-api
 | PUBLIC_PORT     | Public port, set to the mapped port, determines external access address and the port used in push stream results | 80        |
 | NGINX_HTTP_PORT | Nginx HTTP service port, needs to be mapped for external access                                                  | 8080      |
 
+> When IPv6 is enabled on the host/Docker, the container automatically listens on IPv6 addresses as well, with no extra configuration; in IPv4-only or IPv6-disabled environments it is skipped automatically.
+
 If you need to modify environment variables, add the following parameters after the above run command:
 
 ```bash
@@ -379,7 +404,7 @@ generated result files directly on the host. Append the following options to the
 | /log/result     | Log of valid results                            |
 | /log/speed-test | Log of all interfaces involved in speed testing |
 | /log/statistic  | Log of statistics results                       |
-| /log/nomatch    | Log of unmatched channels                       |
+| /log/unmatch    | Log of unmatched channels                       |
 
 **RTMP Streaming:**
 
@@ -387,9 +412,13 @@ generated result files directly on the host. Append the following options to the
 > 1. If deploying on a server, be sure to set the `PUBLIC_DOMAIN` environment variable to the server's domain name or IP
      address and the `PUBLIC_PORT` environment variable to the public port; otherwise the streaming addresses will not
      be accessible.
-> 2. When streaming is enabled, obtained interfaces (e.g., subscription sources) will be streamed by default.
+> 2. When streaming is enabled, obtained interfaces (e.g., subscription sources) will be streamed by default; only use
+     this for content you own, are explicitly authorized to redistribute, or need for closed/internal testing.
 > 3. To stream local video sources, create an `hls` folder under the `config` directory and place video files named
      after the channel; the program will automatically stream them to the corresponding channels.
+> 4. When using this project in Mainland China, make sure the content authorization, copyright, network-audiovisual,
+     and broadcasting-related compliance requirements are satisfied. Do not use it to distribute, relay, or publicly
+     expose unauthorized live streams or program sources.
 
 | Streaming Endpoint | Description                          |
 |:-------------------|:-------------------------------------|
@@ -403,3 +432,123 @@ generated result files directly on the host. Append the following options to the
 | /hls/ipv6/txt      | hls ipv6 txt streaming endpoint      |
 | /hls/ipv6/m3u      | hls ipv6 m3u streaming endpoint      |
 | /stat              | Streaming status statistics endpoint |
+
+##### Streaming Usage Tutorial
+
+Docker enables streaming with minimal configuration and placing local video files in the right folder. Below are two
+common streaming scenarios: subscription (online) sources and local video files. Use this only for content you are
+authorized to relay or for closed/internal technical testing.
+
+1) Preparations before start (example: Docker Compose)
+
+- Use the repository's `docker-compose.yml` and confirm the following environment variables before starting:
+    - `PUBLIC_DOMAIN`: public domain or public IP used in stream Host headers.
+    - `PUBLIC_PORT`: public port mapped on the host (affects final access addresses).
+    - `NGINX_HTTP_PORT`: container internal HTTP port (normally keep default).
+- Make sure the `config` directory is mounted into the container (default `/iptv-api/config`) so you can edit templates,
+  add local videos, and place subscription files on the host.
+
+Example (excerpt from compose for reference):
+
+```yml
+services:
+  iptv-api:
+    image: guovern/iptv-api:latest
+    container_name: iptv-api
+    restart: unless-stopped
+
+    ports:
+      - "80:8080" # host_port:container_http_port
+
+    volumes:
+      - /iptv-api/config:/iptv-api/config # Change to host configuration folder path:container configuration folder path
+      - /iptv-api/output:/iptv-api/output
+
+    environment:
+      PUBLIC_SCHEME: "http"
+      PUBLIC_DOMAIN: "192.168.1.95" # Change to your server domain or IP address. Here it uses my LAN IP as an example.
+      PUBLIC_PORT: "80" # Change to public port
+      NGINX_HTTP_PORT: "8080" # Default HTTP service port inside the container
+      CDN_URL: ""
+      HTTP_PROXY: ""
+```
+
+2) Subscription source streaming (online sources)
+
+- Add subscription URLs (txt or m3u) to `config/subscribe.txt`. On startup the program will read the subscriptions and
+  publish streams for the channels found.
+- Streaming endpoints to view streamed channels:
+    - `/hls/txt`, `/hls/m3u` (and their ipv4/ipv6 variants)
+
+3) Local video streaming (server video files)
+
+- Create an `hls` folder under the mounted `config` directory (for example `/iptv-api/config/hls` on the host).
+- Put video files named exactly as the channel titles used in your template (e.g., `海洋.mp4`). The program will
+  automatically stream the corresponding file for that channel.
+
+Example layout:
+
+```
+iptv-api/
+├── config
+│   └── hls
+│       └── 海洋.mp4
+```
+
+- Add the channel in `config/demo.txt` (or your template) as usual; the program will map the local file to the channel
+  and stream it.
+
+Example template fragment:
+
+```markdown
+📺Main channels,#genre#
+CCTV-1
+
+📡Satellite,#genre#
+Guangdong Satellite
+
+🚀Local video,#genre#
+海洋
+```
+
+4) Start and verify
+
+- Start the service (example using Compose):
+
+```bash
+docker compose up -d
+```
+
+- Verify:
+    - Check startup logs for successful initialization.
+    - View streaming results (txt): visit `/hls/txt` to see current stream addresses and descriptions.
+    - Use `/hls/m3u` to load the playlist into a player or `/hls/txt` for a plain list.
+
+5) Monitoring and logs
+
+- Use the `/stat` endpoint to see current streaming counts, traffic, and basic statistics.
+- Container logs provide detailed stream start/stop messages:
+    - Logs show when a channel starts streaming and when idle channels stop.
+
+6) Common tips and tuning
+
+- Public access & firewall: Make sure `PUBLIC_PORT` is open to the outside (firewall, cloud security groups, etc.).
+  RTMP/HTTP ports must be accessible externally.
+- Domain and certificates: If using a domain with HTTPS, set `PUBLIC_DOMAIN` to your domain and `PUBLIC_SCHEME` to
+  `https`. Manage TLS/HTTPS via an external reverse proxy or your hosting setup.
+- Performance & concurrency: Local streaming consumes CPU and bandwidth. Adjust `rtmp_max_streams` to limit concurrent
+  streams and avoid overloading the server.
+- Idle stop: `rtmp_idle_timeout` controls how long a stream stays active with no viewers (in seconds); tune it per your
+  needs.
+
+7) Useful RTMP-related configuration options
+
+```ini
+# RTMP channel idle stop timeout (seconds)
+rtmp_idle_timeout = 300
+# Maximum concurrent RTMP streams to avoid excessive server load
+rtmp_max_streams = 10
+```
+
+Above is a compact guide to using streaming. Adjust configuration and verify using `/hls/*` and `/stat` endpoints to
+confirm streaming availability and status.

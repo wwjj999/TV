@@ -4,6 +4,7 @@ import datetime
 import gzip
 import os
 import pickle
+import sys
 from time import time
 from typing import Callable, Optional, Any
 
@@ -31,9 +32,11 @@ from utils.tools import (
     get_public_url,
     parse_times,
     to_serializable,
+    get_subscribe_entries,
+    count_disabled_urls,
 )
 from utils.types import CategoryChannelData
-from utils.whitelist import load_whitelist_maps, get_section_entries
+from utils.whitelist import load_whitelist_maps
 
 ProgressCallback = Callable[..., Any]
 
@@ -126,43 +129,72 @@ class UpdateSource:
     # ----------------------------
     # stage 2: fetch subscribe/epg (concurrent)
     # ----------------------------
-    async def _fetch_subscribe(self, channel_names: list[str]):
-        whitelist_subscribe_urls, default_subscribe_urls = get_section_entries(
-            constants.subscribe_path,
-            pattern=constants.url_pattern,
-        )
-        subscribe_urls = list(dict.fromkeys(whitelist_subscribe_urls + default_subscribe_urls))
+    async def _fetch_subscribe(self, channel_names: list[str], epg_urls_out: set = None):
+        whitelist_entries, default_entries = get_subscribe_entries(constants.subscribe_path)
+        disabled_count = count_disabled_urls(constants.subscribe_path)
+
+        seen = set()
+        subscribe_entries = []
+        for e in (whitelist_entries + default_entries):
+            url = e['url'] if isinstance(e, dict) else e
+            if url in seen:
+                continue
+            seen.add(url)
+            subscribe_entries.append(e)
+
         print(
             t("msg.subscribe_urls_whitelist_total").format(
-                default_count=len(default_subscribe_urls),
-                whitelist_count=len(whitelist_subscribe_urls),
-                total=len(subscribe_urls),
-            )
+                default_count=len(default_entries),
+                whitelist_count=len(whitelist_entries),
+                disabled_count=disabled_count,
+                total=len(subscribe_entries),
+            ),
+            flush=True,
         )
-        if not subscribe_urls:
-            print(t("msg.no_subscribe_urls").format(file=constants.subscribe_path))
+
+        if not subscribe_entries:
+            print(t("msg.no_subscribe_urls").format(file=constants.subscribe_path), flush=True)
             return {}
 
+        whitelist_urls = [e['url'] for e in whitelist_entries]
+
         return await get_channels_by_subscribe_urls(
-            subscribe_urls,
+            subscribe_entries,
             names=channel_names,
-            whitelist=whitelist_subscribe_urls,
+            whitelist=whitelist_urls,
             callback=self.update_progress,
+            epg_urls_out=epg_urls_out,
         )
 
-    async def _fetch_epg(self, channel_names: list[str]):
-        return await get_epg(channel_names, callback=self.update_progress)
+    async def _fetch_epg(self, channel_names: list[str], extra_entries: list = None):
+        return await get_epg(channel_names, callback=self.update_progress, extra_entries=extra_entries)
 
     async def visit_page(self, channel_names: list[str] = None):
         """
         Visits subscribe and epg pages concurrently to fetch data.
         """
         channel_names = channel_names or []
+        open_subscribe = config.open_method.get("subscribe")
+        open_epg = config.open_method.get("epg")
+
+        if open_subscribe and open_epg and config.open_subscribe_epg:
+            discovered_epg_urls: set[str] = set()
+            try:
+                self.subscribe_result = await self._fetch_subscribe(channel_names, epg_urls_out=discovered_epg_urls)
+            except Exception as e:
+                print(f"subscribe_result failed: {e}", flush=True)
+                self.subscribe_result = {}
+            try:
+                self.epg_result = await self._fetch_epg(channel_names, extra_entries=sorted(discovered_epg_urls))
+            except Exception as e:
+                print(f"epg_result failed: {e}", flush=True)
+                self.epg_result = {}
+            return
 
         cors: list[tuple[str, asyncio.Future]] = []
-        if config.open_method.get("subscribe"):
+        if open_subscribe:
             cors.append(("subscribe_result", asyncio.create_task(self._fetch_subscribe(channel_names))))
-        if config.open_method.get("epg"):
+        if open_epg:
             cors.append(("epg_result", asyncio.create_task(self._fetch_epg(channel_names))))
 
         if not cors:
@@ -171,7 +203,7 @@ class UpdateSource:
         results = await asyncio.gather(*(c for _, c in cors), return_exceptions=True)
         for (attr, _), res in zip(cors, results):
             if isinstance(res, Exception):
-                print(f"{attr} failed: {res}")
+                print(f"{attr} failed: {res}", flush=True)
                 setattr(self, attr, {})
             else:
                 setattr(self, attr, res)
@@ -207,8 +239,12 @@ class UpdateSource:
         """
         Run speed test on the channel data and return the test results.
         """
-        urls_total = get_urls_len(self.channel_data)
-        test_data = copy.deepcopy(self.channel_data)
+        test_data = {
+            category: copy.deepcopy(items)
+            for category, items in self.channel_data.items()
+            if category != t("content.unmatch_channel")
+        }
+        urls_total = get_urls_len(test_data)
 
         process_nested_dict(
             test_data,
@@ -231,7 +267,14 @@ class UpdateSource:
             )
 
         self.start_time = time()
-        self.pbar = tqdm(total=self.total, desc=t("pbar.speed_test"))
+        self.pbar = tqdm(
+            total=self.total,
+            desc=t("pbar.speed_test"),
+            file=sys.stdout,
+            mininterval=0,
+            miniters=1,
+            dynamic_ncols=False,
+        )
         try:
             return await test_speed(
                 test_data,
@@ -279,14 +322,10 @@ class UpdateSource:
         try:
             main_start_time = time()
 
-            if not config.open_update:
-                self._notify_ui_finished(main_start_time)
-                return
-
             self._prepare_channel_data()
 
             if not self.channel_names:
-                print(t("msg.no_channel_names").format(file=config.source_file))
+                print(t("msg.no_channel_names").format(file=config.source_file), flush=True)
                 self._notify_ui_finished(main_start_time)
                 return
 
@@ -324,12 +363,13 @@ class UpdateSource:
                 t("msg.update_completed").format(
                     time=format_interval(time() - main_start_time),
                     service_tip="",
-                )
+                ),
+                flush=True,
             )
             self._notify_ui_finished(main_start_time)
 
         except asyncio.exceptions.CancelledError:
-            print(t("msg.update_cancelled"))
+            print(t("msg.update_cancelled"), flush=True)
 
     # ----------------------------
     # lifecycle control
@@ -340,6 +380,11 @@ class UpdateSource:
 
         self.update_progress = callback or default_callback
         self.run_ui = True if callback else False
+
+        if not config.open_update:
+            if self.run_ui:
+                self.update_progress(t("msg.update_disabled"), 0, finished=True)
+            return
 
         if self.run_ui:
             self.update_progress(t("msg.check_ipv6_support"), 0)
@@ -387,7 +432,7 @@ class UpdateSource:
 
                     next_time = min(candidates)
                     wait_seconds = (next_time - self.now).total_seconds()
-                    print(t("msg.schedule_update_time").format(time=next_time.strftime("%Y-%m-%d %H:%M:%S")))
+                    print(t("msg.schedule_update_time").format(time=next_time.strftime("%Y-%m-%d %H:%M:%S")), flush=True)
 
                     try:
                         await asyncio.wait_for(stop_event.wait(), timeout=wait_seconds)
@@ -398,7 +443,7 @@ class UpdateSource:
                         await self.main()
                 else:
                     next_time = self.now + datetime.timedelta(hours=config.update_interval)
-                    print(t("msg.schedule_update_time").format(time=next_time.strftime("%Y-%m-%d %H:%M:%S")))
+                    print(t("msg.schedule_update_time").format(time=next_time.strftime("%Y-%m-%d %H:%M:%S")), flush=True)
 
                     try:
                         await asyncio.wait_for(stop_event.wait(), timeout=config.update_interval * 3600)
@@ -407,13 +452,16 @@ class UpdateSource:
                         await self.main()
 
         except asyncio.CancelledError:
-            print(t("msg.schedule_cancelled"))
+            print(t("msg.schedule_cancelled"), flush=True)
 
 
 if __name__ == "__main__":
     info = get_version_info()
-    print(t("msg.version_info").format(name=info["name"], version=info["version"]))
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    update_source = UpdateSource()
-    loop.run_until_complete(update_source.start())
+    print(t("msg.version_info").format(name=info["name"], version=info["version"], build_time=info["build_time"]), flush=True)
+    if not config.open_update:
+        print(t("msg.update_disabled"), flush=True)
+    else:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        update_source = UpdateSource()
+        loop.run_until_complete(update_source.start())
