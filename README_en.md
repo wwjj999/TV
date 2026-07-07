@@ -51,11 +51,31 @@
     - [Docker](#docker)
 - [📖 Detailed Tutorial](./docs/tutorial_en.md)
 - [🗓️ Changelog](./CHANGELOG.md)
+- [🤝 Sponsors](#sponsors)
 - [❤️ Donations](#donations)
 - [👀 Follow](#follow)
 - [⭐️ Star History](#star-history)
 - [⚠️ Disclaimer](#disclaimer)
 - [⚖️ License](#license)
+
+## Sponsors
+
+<p align="center">
+  <a href="https://www.ipwo.net/?ref=githubGuovin">
+    <img src="./docs/images/ipwo.png" alt="Sponsored by IPWO - Residential Proxy Network">
+  </a>
+</p>
+<p align="center">
+  <sub>
+    <a href="https://www.ipwo.net/?ref=githubGuovin"><strong>IPWO</strong></a> provides a stable residential proxy network for compliant scenarios such as public data collection, API debugging, automated testing, and multi-region access verification.
+    Supports HTTP / HTTPS / SOCKS5. Coupon code: <code>0105</code>.
+    Use it only with lawful authorization and in compliance with target site terms.
+  </sub>
+</p>
+
+<p align="center">
+  <a href="mailto:360996299@qq.com?subject=Become%20a%20sponsor">Become a sponsor</a>
+</p>
 
 > [!IMPORTANT]
 > 1. Go to the `Govin` WeChat public account and reply with `cdn` to get an acceleration address to improve access speed
@@ -359,9 +379,9 @@ WeChat public account search for Govin, or scan the code to receive updates and 
 
 ![Wechat public account](./static/images/qrcode.jpg)
 
-### Need more help?
+### Contact Me
 
-Contact via email: `360996299@qq.com`
+Contact via email: [360996299@qq.com](mailto:360996299@qq.com)
 
 ## Star History
 
@@ -401,4 +421,3 @@ Contact via email: `360996299@qq.com`
 [AGPL-3.0](./LICENSE) License &copy; 2024-PRESENT [Govin](https://github.com/guovin)
 
 > Note: This project is licensed under AGPL-3.0. If you operate a modified version as a network service (e.g., hosted service or publicly published container/image), you must provide users with the complete corresponding source code (including your modifications). See: https://www.gnu.org/licenses/agpl-3.0.html
-

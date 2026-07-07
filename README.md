@@ -51,11 +51,31 @@
     - [Docker](#Docker)
 - [📖 详细教程](./docs/tutorial.md)
 - [🗓️ 更新日志](./CHANGELOG.md)
+- [🤝 赞助商](#赞助商)
 - [👀 关注](#关注)
 - [⭐️ Star统计](#Star统计)
 - [❤️ 捐赠](#捐赠)
 - [⚠️ 免责声明](#免责声明)
 - [⚖️ 许可证](#许可证)
+
+## 赞助商
+
+<p align="center">
+  <a href="https://www.ipwo.net/?ref=githubGuovin">
+    <img src="./docs/images/ipwo.png" alt="Sponsored by IPWO - 住宅代理网络">
+  </a>
+</p>
+<p align="center">
+  <sub>
+    <a href="https://www.ipwo.net/?ref=githubGuovin"><strong>IPWO</strong></a> 提供稳定的住宅代理网络，适用于公开数据采集、接口调试、自动化测试与多地区访问验证等合规场景。
+    支持 HTTP / HTTPS / SOCKS5，优惠码：<code>0105</code>。
+    请在合法授权并遵守目标站点条款的前提下使用。
+  </sub>
+</p>
+
+<p align="center">
+  <a href="mailto:360996299@qq.com?subject=%E6%88%90%E4%B8%BA%E8%B5%9E%E5%8A%A9%E5%95%86">成为赞助商</a>
+</p>
 
 > [!IMPORTANT]
 > 1. 前往`Govin`公众号回复`cdn`获取加速地址，提升订阅源与频道图标等资源的访问速度
@@ -344,9 +364,9 @@ docker run -d -p 80:8080 guovern/iptv-api
 
 ![微信公众号](./static/images/qrcode.jpg)
 
-### 需要更多帮助？
+### 联系我
 
-联系邮箱：`360996299@qq.com`
+联系邮箱：[360996299@qq.com](mailto:360996299@qq.com)
 
 ## Star统计
 
@@ -379,4 +399,3 @@ docker run -d -p 80:8080 guovern/iptv-api
 [AGPL-3.0](./LICENSE) License &copy; 2024-PRESENT [Govin](https://github.com/guovin)
 
 > 注意：本项目采用 AGPL-3.0。若将修改后的程序作为网络服务、公开容器镜像或以其他对外服务方式运行，须向使用者提供包括修改在内的完整源代码。详见：https://www.gnu.org/licenses/agpl-3.0.html
-
