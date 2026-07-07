@@ -68,7 +68,7 @@
 <p align="center">
   <sub>
     <a href="https://www.ipwo.net/?ref=githubGuovin"><strong>IPWO</strong></a> 提供稳定的住宅代理网络，适用于公开数据采集、接口调试、自动化测试与多地区访问验证等合规场景。
-    支持 HTTP / HTTPS / SOCKS5，优惠码：<code>0105</code>。
+    支持 HTTP / HTTPS / SOCKS5，优惠码：<strong><code>0105</code></strong>。
     请在合法授权并遵守目标站点条款的前提下使用。
   </sub>
 </p>

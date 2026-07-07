@@ -68,7 +68,7 @@
 <p align="center">
   <sub>
     <a href="https://www.ipwo.net/?ref=githubGuovin"><strong>IPWO</strong></a> provides a stable residential proxy network for compliant scenarios such as public data collection, API debugging, automated testing, and multi-region access verification.
-    Supports HTTP / HTTPS / SOCKS5. Coupon code: <code>0105</code>.
+    Supports HTTP / HTTPS / SOCKS5. Coupon code: <strong><code>0105</code></strong>.
     Use it only with lawful authorization and in compliance with target site terms.
   </sub>
 </p>
