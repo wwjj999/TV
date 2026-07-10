@@ -20,6 +20,7 @@ from utils.frozen import is_url_frozen, mark_url_bad, mark_url_good
 from utils.i18n import t
 from utils.ip_checker import IPChecker
 from utils.speed import (
+    create_speed_test_session,
     get_speed,
     get_speed_result,
     get_sort_result
@@ -743,20 +744,11 @@ async def test_speed(data, ipv6=False, callback=None, on_task_complete=None):
     ipv6_proxy_url = None if (not config.open_ipv6 or ipv6) else constants.ipv6_proxy
     open_full_speed_test = config.open_full_speed_test
     get_resolution = config.open_filter_resolution and check_ffmpeg_installed_status()
-    semaphore = asyncio.Semaphore(config.speed_test_limit)
+    concurrency = max(1, config.speed_test_limit)
+    http_semaphore = asyncio.Semaphore(concurrency)
+    probe_semaphore = asyncio.Semaphore(min(2, concurrency))
     logger = get_logger(constants.speed_test_log_path, level=INFO, init=True)
     result_logger = get_logger(constants.result_log_path, level=INFO, init=True)
-
-    async def limited_get_speed(channel_info):
-        async with semaphore:
-            headers = channel_info.get("headers") or None
-            return await get_speed(
-                channel_info,
-                headers=headers,
-                ipv6_proxy=ipv6_proxy_url,
-                filter_resolution=get_resolution,
-                logger=logger,
-            )
 
     total_tasks = sum(len(info_list) for channel_obj in data.values() for info_list in channel_obj.values())
     total_tasks_by_channel = defaultdict(int)
@@ -764,42 +756,14 @@ async def test_speed(data, ipv6=False, callback=None, on_task_complete=None):
         for name, info_list in channel_obj.items():
             total_tasks_by_channel[(cate, name)] += len(info_list)
     completed = 0
-    tasks = []
-    channel_map = {}
     grouped_results = {}
     completed_by_channel = defaultdict(int)
     urls_limit = config.urls_limit
     valid_count_by_channel = defaultdict(int)
+    stopped_channels = set()
 
-    def _cancel_remaining_channel_tasks(cate, name):
-        for task, meta in list(channel_map.items()):
-            if task.done():
-                continue
-            t_cate, t_name, _ = meta
-            if t_cate == cate and t_name == name:
-                try:
-                    task.cancel()
-                except Exception:
-                    pass
-
-    def _on_task_done(task):
+    def handle_result(cate, name, info, result):
         nonlocal completed
-        try:
-            if task.cancelled():
-                result = {}
-            else:
-                try:
-                    result = task.result()
-                except asyncio.CancelledError:
-                    result = {}
-                except Exception:
-                    result = {}
-        except Exception:
-            result = {}
-        meta = channel_map.get(task)
-        if not meta:
-            return
-        cate, name, info = meta
         if cate not in grouped_results:
             grouped_results[cate] = {}
         if name not in grouped_results[cate]:
@@ -816,7 +780,7 @@ async def test_speed(data, ipv6=False, callback=None, on_task_complete=None):
         if is_valid:
             valid_count_by_channel[(cate, name)] += 1
             if not open_full_speed_test and valid_count_by_channel[(cate, name)] >= urls_limit:
-                _cancel_remaining_channel_tasks(cate, name)
+                stopped_channels.add((cate, name))
 
             try:
                 origin = merged.get('origin')
@@ -852,17 +816,50 @@ async def test_speed(data, ipv6=False, callback=None, on_task_complete=None):
             except Exception:
                 pass
 
-    for cate, channel_obj in data.items():
-        for name, info_list in channel_obj.items():
-            for info in info_list:
-                info['name'] = name
-                task = asyncio.create_task(limited_get_speed(info))
-                channel_map[task] = (cate, name, info)
-                task.add_done_callback(_on_task_done)
-                tasks.append(task)
+    def iter_items():
+        for cate, channel_obj in data.items():
+            for name, info_list in channel_obj.items():
+                for info in info_list:
+                    info['name'] = name
+                    yield cate, name, info
 
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+    item_iterator = iter(iter_items())
+
+    async with create_speed_test_session(concurrency) as session:
+        async def worker():
+            while True:
+                try:
+                    cate, name, info = next(item_iterator)
+                except StopIteration:
+                    return
+
+                result = {}
+                if (cate, name) not in stopped_channels:
+                    try:
+                        async with asyncio.timeout(config.speed_test_timeout):
+                            result = await get_speed(
+                                info,
+                                headers=info.get("headers") or None,
+                                ipv6_proxy=ipv6_proxy_url,
+                                filter_resolution=get_resolution,
+                                timeout=config.speed_test_timeout,
+                                logger=logger,
+                                session=session,
+                                http_semaphore=http_semaphore,
+                                probe_semaphore=probe_semaphore,
+                            )
+                    except TimeoutError:
+                        result = {}
+                    except Exception:
+                        result = {}
+                handle_result(cate, name, info, result)
+
+        workers = [
+            asyncio.create_task(worker())
+            for _ in range(min(concurrency, total_tasks))
+        ]
+        if workers:
+            await asyncio.gather(*workers)
 
     close_logger_handlers(logger)
     close_logger_handlers(result_logger)
