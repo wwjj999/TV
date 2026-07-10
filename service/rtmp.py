@@ -42,13 +42,10 @@ def _save_probe_metadata_to_db(channel_id: str, url: str, headers: dict | None, 
     """
     if not meta:
         return
+    conn = None
     try:
         ensure_result_data_schema(constants.rtmp_data_path)
         conn = get_db_connection(constants.rtmp_data_path)
-    except Exception as e:
-        print(t("msg.write_error").format(info=f"open rtmp db error: {e}"))
-        return
-    try:
         cursor = conn.cursor()
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS result_data ("
@@ -67,10 +64,16 @@ def _save_probe_metadata_to_db(channel_id: str, url: str, headers: dict | None, 
             )
         )
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        print(t("msg.write_error").format(info=e))
     finally:
-        return_db_connection(constants.rtmp_data_path, conn)
+        if conn:
+            return_db_connection(constants.rtmp_data_path, conn)
 
 
 def ensure_hls_idle_monitor_started():
@@ -438,10 +441,11 @@ def hls_idle_monitor():
 
 
 def get_channel_data(channel_id):
-    ensure_result_data_schema(constants.rtmp_data_path)
-    conn = get_db_connection(constants.rtmp_data_path)
     channel_data = {}
+    conn = None
     try:
+        ensure_result_data_schema(constants.rtmp_data_path)
+        conn = get_db_connection(constants.rtmp_data_path)
         cursor = conn.cursor()
         cursor.execute(
             "SELECT url, headers, video_codec, audio_codec, resolution, fps FROM result_data WHERE id=?",
@@ -460,7 +464,8 @@ def get_channel_data(channel_id):
     except Exception as e:
         print(t("msg.error_get_channel_data_from_database").format(info=e))
     finally:
-        return_db_connection(constants.rtmp_data_path, conn)
+        if conn:
+            return_db_connection(constants.rtmp_data_path, conn)
     return channel_data
 
 

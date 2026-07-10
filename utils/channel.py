@@ -1,7 +1,6 @@
 import asyncio
 import gzip
 import hashlib
-import json
 import math
 import os
 import pickle
@@ -15,8 +14,7 @@ from typing import cast
 import utils.constants as constants
 from utils.alias import Alias
 from utils.config import config
-from utils.db import ensure_result_data_schema
-from utils.db import get_db_connection, return_db_connection
+from utils.db import replace_result_data
 from utils.ffmpeg import check_ffmpeg_installed_status
 from utils.frozen import is_url_frozen, mark_url_bad, mark_url_good
 from utils.i18n import t
@@ -1059,39 +1057,6 @@ def process_write_content(
             content = f"{update_title},#genre#\n{now},{value}\n\n{content}"
         else:
             content += f"\n\n{update_title},#genre#\n{now},{value}"
-    if hls_url:
-        db_dir = os.path.dirname(constants.rtmp_data_path)
-        if db_dir:
-            os.makedirs(db_dir, exist_ok=True)
-
-        try:
-            ensure_result_data_schema(constants.rtmp_data_path)
-            conn = get_db_connection(constants.rtmp_data_path)
-        except Exception as e:
-            print(t("msg.write_error").format(info=f"open rtmp db error: {e}"))
-        else:
-            try:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "CREATE TABLE IF NOT EXISTS result_data (id TEXT PRIMARY KEY, url TEXT, headers TEXT, video_codec TEXT, audio_codec TEXT, resolution TEXT, fps REAL)"
-                )
-                for data_list in result_data.values():
-                    for item in data_list:
-                        cursor.execute(
-                            "INSERT OR REPLACE INTO result_data (id, url, headers, video_codec, audio_codec, resolution, fps) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            (
-                                str(item.get("id")),
-                                item.get("url"),
-                                json.dumps(item.get("headers", None)),
-                                item.get("video_codec"),
-                                item.get("audio_codec"),
-                                item.get("resolution"),
-                                item.get("fps"),
-                            )
-                        )
-                conn.commit()
-            finally:
-                return_db_connection(constants.rtmp_data_path, conn)
     try:
         target_dir = os.path.dirname(path) or "."
         os.makedirs(target_dir, exist_ok=True)
@@ -1149,6 +1114,29 @@ def write_channel_to_file(data, ipv6=False, first_channel_name=None, skip_print=
                     "ipv_type_prefer": ["ipv6"]
                 },
             ]
+            rtmp_rows = {}
+            unmatch_category = t("content.unmatch_channel")
+            for file in file_list:
+                if not file.get("hls_url"):
+                    continue
+                file_ipv_type_prefer = file.get("ipv_type_prefer", ipv_type_prefer)
+                for cate, channel_obj in data.items():
+                    for info_list in channel_obj.values():
+                        channel_urls = _get_total_urls_cached(
+                            info_list,
+                            file_ipv_type_prefer,
+                            origin_type_prefer,
+                            ["hls"],
+                            apply_limit=cate != unmatch_category,
+                        )
+                        for item in channel_urls:
+                            item_id = item.get("id")
+                            if item_id is not None:
+                                rtmp_rows[str(item_id)] = item
+            try:
+                replace_result_data(constants.rtmp_data_path, rtmp_rows.values())
+            except Exception as e:
+                print(t("msg.write_error").format(info=e), flush=True)
         for file in file_list:
             target_dir = os.path.dirname(file["path"])
             if target_dir:
