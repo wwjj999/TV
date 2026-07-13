@@ -14,7 +14,7 @@ from typing import cast
 import utils.constants as constants
 from utils.alias import Alias
 from utils.config import config
-from utils.db import replace_result_data
+from utils.db import sync_result_data
 from utils.ffmpeg import check_ffmpeg_installed_status
 from utils.frozen import is_url_frozen, mark_url_bad, mark_url_good
 from utils.i18n import t
@@ -993,6 +993,9 @@ def generate_channel_statistic(logger, cate, name, values):
         print(f"📊 {content}")
 
 
+_WRITTEN_CONTENT_DIGESTS = {}
+
+
 def process_write_content(
         path: str,
         data: CategoryChannelData,
@@ -1055,6 +1058,26 @@ def process_write_content(
             end_char = ", " if i < len(no_result_name) - 1 else ""
             custom_print(name, end=end_char)
             content += f"\n{name},url"
+    render_hasher = hashlib.sha256(content.encode("utf-8"))
+    render_hasher.update(
+        repr((
+            is_last,
+            first_channel_name,
+            config.open_epg,
+            config.open_update_time,
+            config.update_time_position,
+            config.logo_url,
+            config.logo_type,
+            config.open_subscribe_logo,
+            config.user_agent,
+            config.cdn_url,
+            get_public_url(),
+        )).encode("utf-8")
+    )
+    render_signature = render_hasher.digest()
+    m3u_path = os.path.splitext(path)[0] + ".m3u"
+    if _WRITTEN_CONTENT_DIGESTS.get(path) == render_signature and os.path.exists(path) and os.path.exists(m3u_path):
+        return False
     if config.open_update_time:
         update_time_item = next(
             (urls[0] for channel_obj in data.values()
@@ -1098,9 +1121,11 @@ def process_write_content(
             print(t("msg.write_error").format(info=e), flush=True)
             return
     try:
-        convert_to_m3u(path, first_channel_name, data=result_data)
+        convert_to_m3u(path, first_channel_name, data=result_data, content=content)
+        _WRITTEN_CONTENT_DIGESTS[path] = render_signature
     except Exception as e:
         print(t("msg.write_error").format(info=f"convert m3u error: {e}"), flush=True)
+    return True
 
 
 def write_channel_to_file(data, ipv6=False, first_channel_name=None, skip_print=False, is_last=False):
@@ -1154,15 +1179,12 @@ def write_channel_to_file(data, ipv6=False, first_channel_name=None, skip_print=
                             item_id = item.get("id")
                             if item_id is not None:
                                 rtmp_rows[str(item_id)] = item
-            try:
-                replace_result_data(constants.rtmp_data_path, rtmp_rows.values())
-            except Exception as e:
-                print(t("msg.write_error").format(info=e), flush=True)
+        hls_changed = False
         for file in file_list:
             target_dir = os.path.dirname(file["path"])
             if target_dir:
                 os.makedirs(target_dir, exist_ok=True)
-            process_write_content(
+            changed = process_write_content(
                 path=file["path"],
                 data=data,
                 hls_url=file.get("hls_url"),
@@ -1173,6 +1195,13 @@ def write_channel_to_file(data, ipv6=False, first_channel_name=None, skip_print=
                 enable_log=file.get("enable_log", False),
                 is_last=is_last
             )
+            if file.get("hls_url") and changed:
+                hls_changed = True
+        if hls_changed:
+            try:
+                sync_result_data(constants.rtmp_data_path, rtmp_rows.values())
+            except Exception as e:
+                print(t("msg.write_error").format(info=e), flush=True)
         if not skip_print:
             print(t("msg.write_success"), flush=True)
     except Exception as e:

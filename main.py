@@ -222,7 +222,9 @@ class UpdateSource:
             base_data=self.channel_data,
             first_channel_name=self.channel_names[0] if self.channel_names else None,
             ipv6_support=self.ipv6_support,
-            write_interval=2.0,
+            write_interval=10.0,
+            flush_debounce=2.0,
+            min_items_before_flush=max(25, config.urls_limit),
             result=cache,
         )
         await self.aggregator.start()
